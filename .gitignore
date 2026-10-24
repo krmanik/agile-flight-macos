@@ -7,3 +7,5 @@ devel/
 logs/
 install/
 .catkin_tools/
+# Unity renderer project (cloned by scripts/build_renderer.sh)
+unity/

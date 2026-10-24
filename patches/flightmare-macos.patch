@@ -121,3 +121,16 @@ index 2045b62..e23c82d 100644
    }
  
    YAML::Node cfg = YAML::LoadFile(cfg_path);
+diff --git a/flightpy/configs/vision/config.yaml b/flightpy/configs/vision/config.yaml
+index 055efca..7bdc578 100644
+--- a/flightpy/configs/vision/config.yaml
++++ b/flightpy/configs/vision/config.yaml
+@@ -32,7 +32,7 @@ rgb_camera:
+   enable_opticalflow: no
+ 
+ unity:
+-  scene_id: 0 # 0 warehouse, 1 street, 2 forest, 3 wasteland
++  scene_id: 1 # 0 warehouse, 1 street, 2 forest, 3 wasteland (macOS: only 1 = Industrial ships in public flightmare_unity)
+   render: no 
+ 
+ simulation:

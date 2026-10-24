@@ -60,12 +60,35 @@ Rebuild after code changes with `pixi run build` (or `catkin build` inside `pixi
 | DodgeDrone simulator (`envsim`), physics, obstacles, controllers | ✅ |
 | rqt pilot GUI (Arm / Start / Land) | ✅ |
 | Competition stack: `evaluation_node.py`, `run_competition.py`, state-based policies | ✅ |
-| Camera images (RGB / depth), vision-based mode | ❌ needs the Unity renderer, see below |
+| Camera images (RGB / depth), vision-based mode | ✅ after building the Unity renderer (below) |
+| Environments other than Industrial | ❌ not in the public Unity project |
 | NVIDIA CUDA | ❌ PyTorch runs on CPU / MPS |
 
-### Camera images (Unity renderer)
+## Camera images (Unity renderer)
 
-Images come from the Flightmare Unity standalone, which upstream only ships for Linux x86_64. Its source is public at [uzh-rpg/flightmare_unity](https://github.com/uzh-rpg/flightmare_unity), branch `dev/agile_flight` (Unity 2021.2.11f1). A macOS build of it should connect over ZMQ on localhost, but this hasn't been tested yet. Until then, run with `render:=False`. The image panels in rviz stay empty.
+Images come from the Flightmare Unity standalone, which upstream only ships for Linux x86_64. `pixi run build-renderer` builds a native Apple Silicon (Metal) version from the public source, [uzh-rpg/flightmare_unity](https://github.com/uzh-rpg/flightmare_unity), branch `dev/agile_flight`.
+
+1. Install Unity Hub (`brew install --cask unity-hub`) and Unity Editor **2021.3.45f2** (Apple silicon). Either use the Hub UI, or run:
+   ```bash
+   "/Applications/Unity Hub.app/Contents/MacOS/Unity Hub" -- --headless install \
+     --version 2021.3.45f2 --changeset 88f88f591b2e --architecture arm64
+   ```
+2. Open Unity Hub, sign in, and add a license (Preferences → Licenses → Add → free Personal license).
+3. Build and install the renderer. The first build imports all assets and takes a while:
+   ```bash
+   pixi run build-renderer
+   ```
+4. Run with images:
+   ```bash
+   pixi run demo --render
+   ```
+   The images appear on `/kingfisher/dodgeros_pilot/unity/image` and `.../unity/depth` (320×240, 25 Hz) and in rviz.
+
+Notes:
+
+- **Only the Industrial ("street") environment is public.** The Warehouse, Forest and Wasteland scenes use commercial assets that UZH keeps out of the public repo. The macOS patch therefore sets `scene_id: 1` in `flightmare/flightpy/configs/vision/config.yaml`. If you have the full asset set, put your project at `FLIGHTMARE_UNITY_PROJECT=/path/to/project`, rebuild, and change `scene_id` back.
+- The renderer is built with 2021.3 LTS instead of the project's original 2021.2. The build script adds `com.unity.nuget.newtonsoft-json`, which the 2021.3 package upgrade otherwise drops.
+- The Unity player log is at `~/Library/Logs/Robotics and Perception Group/RPG_Flightmare/Player.log`.
 
 ## What the setup changes
 
@@ -83,11 +106,14 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 | Gazebo multicast fails, and the online model DB is gone | `GAZEBO_IP`/`IGN_IP=127.0.0.1`, empty `GAZEBO_MODEL_DATABASE_URI` |
 | `FLIGHTMARE_PATH` unset, so the node segfaults | exported by [`activate.sh`](activate.sh) |
 | Submodule URLs use SSH | rewritten to HTTPS during setup |
+| Obstacle layouts (`static_obstacles.csv`) are a separate download | fetched by setup from UZH (~600 MB; skip with `SKIP_OBSTACLES=1`) |
+| Unity renderer only released for Linux | built from source for macOS arm64 (`pixi run build-renderer`) |
 
 ## Troubleshooting
 
 - **`symbol not found in flat namespace '__Py_NoneStruct'`**: run `pixi run fix-macos`. Re-run it after anything that reinstalls the environment (`pixi install`, `pixi add`, `pixi update`).
 - **"No valid state estimate, will not start!"**: you pressed Start too early. Wait a few seconds after launch and press it again.
+- **`Unity Connection time out!` / empty images**: run `pixi run build-renderer` first. If it still fails, check `Player.log` (see above). A missing `static_obstacles.csv` makes the renderer error out, so re-run setup without `SKIP_OBSTACLES`.
 - **Port 11311 already in use**: a previous `roscore` is still running. Stop it with `pkill -f rosmaster`.
 - **Start over**: `rm -rf build devel logs .catkin_tools` and run `pixi run setup` again. Delete `.pixi` too for a completely fresh environment.
 

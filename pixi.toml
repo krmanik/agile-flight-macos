@@ -48,3 +48,4 @@ fix-macos = "pixi exec --spec py-lief --spec python=3.12 -- python scripts/fix_r
 setup = "bash scripts/setup.sh"
 build = "catkin build"
 demo = "bash scripts/demo_flight.sh"
+build-renderer = "bash scripts/build_renderer.sh"

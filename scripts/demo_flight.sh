@@ -2,14 +2,17 @@
 # One-command DodgeDrone demo: simulator + rqt pilot GUI + rviz, then
 # arm, take off, and fly the example state-based policy (envtest/ros/user_code.py).
 # Run inside the workspace env:  pixi run demo   (or: pixi run bash scripts/demo_flight.sh)
-# Flags: --headless (no GUI/rviz), --vision_based (passed to run_competition.py)
+# Flags: --headless (no GUI/rviz), --render (Unity camera images, needs
+#        pixi run build-renderer), --vision_based (passed to run_competition.py)
 set -e
 
 GUI=True
+RENDER=False
 COMP_ARGS=()
 for arg in "$@"; do
   case "$arg" in
     --headless) GUI=False ;;
+    --render) RENDER=True ;;
     *) COMP_ARGS+=("$arg") ;;
   esac
 done
@@ -33,7 +36,7 @@ altitude() {
 }
 
 cd "$ENVTEST"
-roslaunch envsim visionenv_sim.launch render:=False gui:=$GUI rviz:=$GUI &
+roslaunch envsim visionenv_sim.launch render:=$RENDER gui:=$GUI rviz:=$GUI &
 pids+=($!)
 
 echo ">>> Waiting for simulator state"

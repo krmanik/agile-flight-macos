@@ -40,6 +40,17 @@ cat > "$AF/flightmare/flightlib/include/flightlib/json/json.hpp" <<'EOF'
 #include <nlohmann/json.hpp>
 EOF
 
+# Obstacle layouts (static_obstacles.csv, dynamic trajectories) from upstream's
+# setup_ros.bash; without them there are no obstacles and the renderer errors out.
+VISION_CFG="$AF/flightmare/flightpy/configs/vision"
+if [ -z "${SKIP_OBSTACLES:-}" ] && [ ! -d "$VISION_CFG/medium" ]; then
+  echo ">>> Downloading obstacle trajectories (~600 MB)"
+  curl -fL --retry 3 -o "$VISION_CFG/trajectories.zip" \
+    https://download.ifi.uzh.ch/rpg/Flightmare/trajectories.zip
+  unzip -q -o "$VISION_CFG/trajectories.zip" -d "$VISION_CFG"
+  rm "$VISION_CFG/trajectories.zip"
+fi
+
 # flightros needs Gazebo/rotors packages not used by the DodgeDrone sim
 touch "$AF/flightmare/flightros/CATKIN_IGNORE"
 
