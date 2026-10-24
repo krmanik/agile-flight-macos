@@ -1,0 +1,50 @@
+[workspace]
+name = "agile-flight-macos"
+channels = ["https://prefix.dev/robostack-noetic", "https://prefix.dev/conda-forge"]
+platforms = ["osx-arm64"]
+
+[dependencies]
+ros-noetic-desktop-full = "*"
+catkin_tools = "*"
+rosdep = "*"
+compilers = "*"
+cmake = "*"
+pkg-config = "*"
+make = "*"
+ninja = "*"
+zmqpp = ">=4.2.0,<5"
+zeromq = ">=4.3.5,<5"
+cppzmq = ">=4.11.0,<5"
+yaml-cpp = ">=0.8.0,<0.9"
+eigen = ">=3.4.0,<4"
+llvm-openmp = ">=23.1.4,<24"
+libopencv = ">=4.13.0,<5"
+ros-noetic-cv-bridge = ">=1.16.2,<2"
+ros-noetic-image-transport = ">=1.12.1,<2"
+empy = "==3.3.4"
+nlohmann_json = ">=3.12.0,<4"
+"ruamel.yaml" = ">=0.19.1,<0.20"
+scipy = ">=1.18.1,<2"
+pytorch = ">=2.12.0,<3"
+
+[activation.env]
+ROS_HOSTNAME = "localhost"
+ROS_MASTER_URI = "http://localhost:11311"
+IGN_IP = "127.0.0.1"
+GAZEBO_IP = "127.0.0.1"
+GAZEBO_MASTER_URI = "http://127.0.0.1:11345"
+GAZEBO_MODEL_DATABASE_URI = ""
+
+[pypi-dependencies]
+uniplot = ">=0.23.2, <0.24"
+stable-baselines3 = ">=2.9.0, <3"
+
+[activation]
+scripts = ["activate.sh"]
+
+[tasks]
+# RoboStack's librospack lacks its libpython dependency; patch it after every install
+fix-macos = "pixi exec --spec py-lief --spec python=3.12 -- python scripts/fix_rospack.py $CONDA_PREFIX/lib"
+setup = "bash scripts/setup.sh"
+build = "catkin build"
+demo = "bash scripts/demo_flight.sh"

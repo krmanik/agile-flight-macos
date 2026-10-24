@@ -1,0 +1,13 @@
+diff --git a/dodgeros/dodgeros/CMakeLists.txt b/dodgeros/dodgeros/CMakeLists.txt
+index dc00a72..1b58e4c 100644
+--- a/dodgeros/dodgeros/CMakeLists.txt
++++ b/dodgeros/dodgeros/CMakeLists.txt
+@@ -70,6 +70,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+     -Wno-c99-extensions
+     -Wno-implicit-int-conversion
+     -Wno-non-virtual-dtor
++    # Newer clang warns inside Eigen and generated msg headers
++    -Wno-error
+   )
+ endif()
+ 

@@ -1,0 +1,123 @@
+diff --git a/flightlib/cmake/catkin.cmake b/flightlib/cmake/catkin.cmake
+index b4381eb..55d5443 100644
+--- a/flightlib/cmake/catkin.cmake
++++ b/flightlib/cmake/catkin.cmake
+@@ -43,6 +43,8 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+     -Wno-implicit-int-float-conversion
+     -Wno-c99-extensions
+     -Wno-implicit-int-conversion
++    # Newer clang warns inside bundled Eigen/json headers
++    -Wno-error
+   )
+ endif()
+ 
+diff --git a/flightlib/src/bridges/unity_bridge.cpp b/flightlib/src/bridges/unity_bridge.cpp
+index 934e3e4..d405566 100644
+--- a/flightlib/src/bridges/unity_bridge.cpp
++++ b/flightlib/src/bridges/unity_bridge.cpp
+@@ -152,7 +152,7 @@ void UnityBridge::setRenderOffset(const Ref<Vector<3>> render_offset) {
+ 
+ bool UnityBridge::setObjectCSV(const std::string& csv_file) {
+   if (!(file_exists(csv_file))) {
+-    logger_.error("Configuration file %s does not exists.", csv_file);
++    logger_.error("Configuration file %s does not exists.", csv_file.c_str());
+     return false;
+   }
+   // logger_.info("Scene ID is set to %d.", scene_id);
+@@ -272,7 +272,7 @@ FrameID UnityBridge::handleOutput(const FrameID sent_frame_id) {
+     for (const auto& cam : settings_.vehicles[idx].cameras) {
+       for (size_t layer_idx = 0; layer_idx <= cam.enabled_layers.size();
+            layer_idx++) {
+-        if (!layer_idx == 0 && !cam.enabled_layers[layer_idx - 1]) continue;
++        if (layer_idx != 0 && !cam.enabled_layers[layer_idx - 1]) continue;
+ 
+         if (layer_idx == 1) {
+           // depth
+diff --git a/flightlib/src/common/logger.cpp b/flightlib/src/common/logger.cpp
+index 41023ec..97f8c3c 100644
+--- a/flightlib/src/common/logger.cpp
++++ b/flightlib/src/common/logger.cpp
+@@ -21,7 +21,7 @@ Logger::Logger(const std::string& name, const std::string& filename)
+     if (fbuf->open(filename, std::ios::out))
+       sink_.rdbuf(fbuf);
+     else
+-      warn("Could not open file %s. Logging to console!", filename);
++      warn("Could not open file %s. Logging to console!", filename.c_str());
+   }
+   sink_.precision(DEFAULT_PRECISION);
+ }
+diff --git a/flightlib/src/envs/quadrotor_env/quadrotor_env.cpp b/flightlib/src/envs/quadrotor_env/quadrotor_env.cpp
+index 8d4af50..4aef6e8 100644
+--- a/flightlib/src/envs/quadrotor_env/quadrotor_env.cpp
++++ b/flightlib/src/envs/quadrotor_env/quadrotor_env.cpp
+@@ -11,7 +11,7 @@ QuadrotorEnv::QuadrotorEnv(const std::string &cfg_path, const int env_id)
+   : EnvBase() {
+   // check if configuration file exist
+   if (!(file_exists(cfg_path))) {
+-    logger_.error("Configuration file %s does not exists.", cfg_path);
++    logger_.error("Configuration file %s does not exists.", cfg_path.c_str());
+   }
+   // load configuration file
+   cfg_ = YAML::LoadFile(cfg_path);
+diff --git a/flightlib/src/envs/vision_env/vision_env.cpp b/flightlib/src/envs/vision_env/vision_env.cpp
+index 93f1c9a..524d2d1 100644
+--- a/flightlib/src/envs/vision_env/vision_env.cpp
++++ b/flightlib/src/envs/vision_env/vision_env.cpp
+@@ -12,7 +12,7 @@ VisionEnv::VisionEnv(const std::string &cfg_path, const int env_id)
+   : EnvBase() {
+   // check if configuration file exist
+   if (!(file_exists(cfg_path))) {
+-    logger_.error("Configuration file %s does not exists.", cfg_path);
++    logger_.error("Configuration file %s does not exists.", cfg_path.c_str());
+   }
+   // load configuration file
+   cfg_ = YAML::LoadFile(cfg_path);
+@@ -466,7 +466,7 @@ bool VisionEnv::loadParam(const YAML::Node &cfg) {
+   // check if configuration file exist
+   if (!(file_exists(scene_file))) {
+     logger_.error("Unity scene configuration file %s does not exists.",
+-                  scene_file);
++                  scene_file.c_str());
+   }
+   // load configuration file
+   YAML::Node scene_cfg_node = YAML::LoadFile(scene_file);
+@@ -481,7 +481,7 @@ bool VisionEnv::loadParam(const YAML::Node &cfg) {
+ bool VisionEnv::configDynamicObjects(const std::string &yaml_file) {
+   //
+   if (!(file_exists(yaml_file))) {
+-    logger_.error("Configuration file %s does not exists.", yaml_file);
++    logger_.error("Configuration file %s does not exists.", yaml_file.c_str());
+     return false;
+   }
+   YAML::Node cfg_node = YAML::LoadFile(yaml_file);
+@@ -515,7 +515,7 @@ bool VisionEnv::configDynamicObjects(const std::string &yaml_file) {
+     std::string csv_file = obstacle_cfg_path_ + std::string("/csvtrajs/") +
+                            csv_name + std::string(".csv");
+     if (!(file_exists(csv_file))) {
+-      logger_.error("Configuration file %s does not exists.", csv_file);
++      logger_.error("Configuration file %s does not exists.", csv_file.c_str());
+       return false;
+     }
+     obj->loadTrajectory(csv_file);
+@@ -529,7 +529,7 @@ bool VisionEnv::configDynamicObjects(const std::string &yaml_file) {
+ bool VisionEnv::configStaticObjects(const std::string &csv_file) {
+   //
+   if (!(file_exists(csv_file))) {
+-    logger_.error("Configuration file %s does not exists.", csv_file);
++    logger_.error("Configuration file %s does not exists.", csv_file.c_str());
+     return false;
+   }
+   std::ifstream infile(csv_file);
+diff --git a/flightlib/src/objects/quadrotor.cpp b/flightlib/src/objects/quadrotor.cpp
+index 2045b62..e23c82d 100644
+--- a/flightlib/src/objects/quadrotor.cpp
++++ b/flightlib/src/objects/quadrotor.cpp
+@@ -11,7 +11,7 @@ Quadrotor::Quadrotor(const std::string &cfg_path)
+         .finished()) {
+   // check if configuration file exist
+   if (!(file_exists(cfg_path))) {
+-    logger_.error("Configuration file %s does not exists.", cfg_path);
++    logger_.error("Configuration file %s does not exists.", cfg_path.c_str());
+   }
+ 
+   YAML::Node cfg = YAML::LoadFile(cfg_path);
