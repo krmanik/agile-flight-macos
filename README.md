@@ -10,6 +10,10 @@ Upstream only supports Ubuntu 20.04 + ROS Noetic. This repo provides:
 
 Upstream sources are fetched from the public `uzh-rpg` repositories at setup time. Nothing from them is vendored here.
 
+![Onboard camera on an M4 Mac: RGB (left) and depth (right) from the Flightmare renderer during the demo flight](docs/img/camera_rgb_depth.png)
+
+*Onboard camera during `pixi run demo --render` on an Apple M4: RGB (left) and depth (right) from the natively built Flightmare renderer, flying through the DodgeDrone obstacle field in the Industrial scene.*
+
 ## Requirements
 
 - Mac with Apple Silicon (arm64), recent macOS
@@ -113,6 +117,7 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 
 - **`symbol not found in flat namespace '__Py_NoneStruct'`**: run `pixi run fix-macos`. Re-run it after anything that reinstalls the environment (`pixi install`, `pixi add`, `pixi update`).
 - **"No valid state estimate, will not start!"**: you pressed Start too early. Wait a few seconds after launch and press it again.
+- **First `--render` run is slow**: the first launch of the freshly built app can take over a minute (macOS checks the new app, and Unity compiles Metal shaders). If the drone doesn't take off, stop with Ctrl-C and run the demo again.
 - **`Unity Connection time out!` / empty images**: run `pixi run build-renderer` first. If it still fails, check `Player.log` (see above). A missing `static_obstacles.csv` makes the renderer error out, so re-run setup without `SKIP_OBSTACLES`.
 - **Port 11311 already in use**: a previous `roscore` is still running. Stop it with `pkill -f rosmaster`.
 - **Start over**: `rm -rf build devel logs .catkin_tools` and run `pixi run setup` again. Delete `.pixi` too for a completely fresh environment.
