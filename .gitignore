@@ -2,6 +2,7 @@
 .pixi/
 # catkin workspace (sources are fetched by scripts/setup.sh)
 src/agile_flight/
+src/acmpc_public/
 build/
 devel/
 logs/
@@ -9,3 +10,8 @@ install/
 .catkin_tools/
 # Unity renderer project (cloned by scripts/build_renderer.sh)
 unity/
+# flightgym Python binding (scripts/build_flightgym.sh)
+build_flightgym/
+# ACMPC training runs
+acmpc/saved/
+__pycache__/

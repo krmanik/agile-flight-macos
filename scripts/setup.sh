@@ -30,6 +30,7 @@ apply_patch() {
 }
 apply_patch "$AF/flightmare" "$WS/patches/flightmare-macos.patch"
 apply_patch "$AF/dodgedrone_simulation" "$WS/patches/dodgedrone_simulation-macos.patch"
+apply_patch "$AF" "$WS/patches/agile_flight-macos.patch"
 
 # Bundled nlohmann/json 2.1.1 does not compile with libc++ (no to_json for
 # std::vector<bool>); point it at the env's nlohmann/json 3.x.
@@ -69,5 +70,8 @@ catkin config --merge-devel --cmake-args \
 
 echo ">>> Building"
 catkin build --summarize
+
+echo ">>> Building the flightgym Python binding"
+bash "$WS/scripts/build_flightgym.sh"
 
 echo ">>> Done. Run the demo with: pixi run demo"

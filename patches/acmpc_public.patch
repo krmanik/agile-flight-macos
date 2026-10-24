@@ -1,0 +1,35 @@
+diff --git a/training_modules/mlp_mpc_policy.py b/training_modules/mlp_mpc_policy.py
+index 9f1c820..ee6b8ba 100644
+--- a/training_modules/mlp_mpc_policy.py
++++ b/training_modules/mlp_mpc_policy.py
+@@ -1,7 +1,7 @@
+ import sys
+ import os
+ 
+-DRONE_PATH = "<YOUR_ACMPC_FOLDER>/diff_mpc_drones/"
++DRONE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "diff_mpc_drones")
+ 
+ 
+ sys.path.append(DRONE_PATH)
+@@ -11,7 +11,7 @@ import il_env
+ 
+ from typing import Callable, Dict, List, Optional, Tuple, Type, Union
+ 
+-from gym import spaces
++from gymnasium import spaces
+ import torch as th
+ from torch import nn
+ 
+diff --git a/training_modules/mlp_only_policy.py b/training_modules/mlp_only_policy.py
+index 5d2834c..82b870a 100644
+--- a/training_modules/mlp_only_policy.py
++++ b/training_modules/mlp_only_policy.py
+@@ -1,7 +1,7 @@
+ import sys
+ from typing import Callable, Dict, List, Optional, Tuple, Type, Union
+ 
+-from gym import spaces
++from gymnasium import spaces
+ import torch as th
+ from torch import nn
+ 

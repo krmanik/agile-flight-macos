@@ -69,7 +69,10 @@ Rebuild after code changes with `pixi run build` (or `catkin build` inside `pixi
 | rqt pilot GUI (Arm / Start / Land) | ✅ |
 | Competition stack: `evaluation_node.py`, `run_competition.py`, state-based policies | ✅ |
 | Camera images (RGB / depth), vision-based mode | ✅ after building the Unity renderer (below) |
+| Python RL env `flightgym` (`VisionEnv_v1`), `rpg_baselines` PPO training and evaluation | ✅ (below) |
+| ACMPC training (differentiable MPC actor) and flying the policy in the ROS sim | ✅ (below) |
 | Environments other than Industrial | ❌ not in the public Unity project |
+| BEM propeller model (`use_bem_propeller_model:=True`) | ❌ no-op upstream: `visionsim_node` always uses `ModelThrustTorqueSimple`, and the public dodgelib has no BEM model |
 | NVIDIA CUDA | ❌ PyTorch runs on CPU / MPS |
 
 ## Camera images (Unity renderer)
@@ -98,6 +101,49 @@ Notes:
 - The renderer is built with 2021.3 LTS instead of the project's original 2021.2. The build script adds `com.unity.nuget.newtonsoft-json`, which the 2021.3 package upgrade otherwise drops.
 - The Unity player log is at `~/Library/Logs/Robotics and Perception Group/RPG_Flightmare/Player.log`.
 
+## Python RL environment (flightgym)
+
+`pixi run setup` also builds flightlib's Python binding, `flightgym`, into `build_flightgym/`. The environment puts it and `rpg_baselines` on `PYTHONPATH`, so no `pip install` is needed. Rebuild after C++ changes with `pixi run build-flightgym`.
+
+```bash
+pixi shell
+cd src/agile_flight/envtest
+python -m python.run_vision_ppo --train 1                      # PPO, 100 envs, logs to python/saved/PPO_<n>
+python -m python.run_vision_ppo --train 0 --trial 1 --iter 50  # evaluate a checkpoint
+python -m python.run_vision_demo --render 1                    # random actions + Unity RGB/depth (needs build-renderer)
+```
+
+On an M4 (CPU only), PPO training runs at about 7,600 environment steps per second. Upstream's Python code targets gym 0.21, stable-baselines3 1.x, numpy 1.x and an older ruamel.yaml. The patches port it to gymnasium, stable-baselines3 2.x, numpy 2 and ruamel.yaml 0.19 (see the table below).
+
+## ACMPC (Actor-Critic MPC)
+
+[ACMPC](https://github.com/uzh-rpg/acmpc_public) (Romero et al., T-RO 2025) puts a differentiable MPC ([mpc.pytorch](https://github.com/locuslab/mpc.pytorch)) inside the PPO actor: an MLP predicts the MPC cost, and the MPC's first collective-thrust + body-rate (CTBR) command is the action. [`acmpc/`](acmpc/) trains it on flightgym's `VisionEnv_v1` and flies it in the ROS simulator.
+
+```bash
+pixi run setup-acmpc      # clones uzh-rpg/acmpc_public + mpc.pytorch into src/acmpc_public
+                          # (or: export ACMPC_PATH=/path/to/your/acmpc_public first)
+pixi run train-acmpc      # ACMPC, MPC horizon 5; logs to acmpc/saved/MPC_<n>
+pixi run train-acmpc --policy mlp   # model-free baseline with ACMPC's network sizes
+```
+
+Fly a checkpoint in the ROS simulator with CTBR commands. This replaces `run_competition.py` in the manual workflow above:
+
+```bash
+# Terminal 1 and 2: simulator and evaluation_node.py, as above
+# Terminal 3:
+python acmpc/run_acmpc_ros.py --run acmpc/saved/MPC_1 --iter 500
+# Terminal 4: GUI "Arm Bridge" + "Start", then
+rostopic pub /kingfisher/start_navigation std_msgs/Empty "{}" -1
+```
+
+How it fits together:
+
+- **No stable-baselines3 fork.** ACMPC ships a stable-baselines3 1.7 fork (it pins gym 0.21, which doesn't install on Python 3.12). The fork passes a 13-dim drone state `[p, q, v, w]` next to the observation through the policy, rollout buffer and PPO, and uses the MPC output directly as the Gaussian mean (`distr_identity`). [`acmpc_policy.py`](acmpc/acmpc_policy.py) does the same on stock stable-baselines3 2.x: [`acmpc_env.py`](acmpc/acmpc_env.py) appends the raw drone state to the observation, and the policy splits it off again. The upstream `CustomNetwork` / `CustomNetworkMlp` are used unchanged, and the fork's submodule is not needed.
+- **Task.** The paper's racing environment is not public. Training uses DodgeDrone's obstacle-avoidance task (state-based: goal velocity, attitude, velocity, 10 nearest obstacles). `VisionEnv_v1` already takes CTBR actions, normalized the same way as ACMPC's MPC output.
+- **Matching dynamics.** `acmpc_config()` sets the env's body-rate limits to `[10, 10, 4]` rad/s and the max thrust to 8.5 N per rotor. These are the limits of ACMPC's MPC model (`drone.py`) and of the ROS simulator's `kingfisher.yaml`. flightlib's default derives 12.25 N per rotor from `motor_omega_max`, so without this the MPC's thrust commands would be scaled wrong.
+- **Speed.** On an M4 (CPU), one MPC solve for 100 environments takes about 8 ms forward and 6 ms backward. mpc.pytorch prints `pnqp warning: Did not converge` because ACMPC runs one LQR iteration per step, as upstream does.
+- `patches/acmpc_public.patch` replaces the `DRONE_PATH` placeholder and imports `gymnasium` instead of `gym`.
+
 ## What the setup changes
 
 All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.toml`](pixi.toml):
@@ -116,6 +162,11 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 | Submodule URLs use SSH | rewritten to HTTPS during setup |
 | Obstacle layouts (`static_obstacles.csv`) are a separate download | fetched by setup from UZH (~600 MB; skip with `SKIP_OBSTACLES=1`) |
 | Unity renderer only released for Linux | built from source for macOS arm64 (`pixi run build-renderer`) |
+| flightlib downloads pybind11 `master` in a nested CMake project that CMake 4 rejects | use the env's pybind11 3.x (`find_package(pybind11)`) |
+| `rpg_baselines` imports `gym` and removed numpy aliases (`np.Inf`, `np.bool`) | `gymnasium`, `np.inf`, `bool` |
+| `rpg_baselines` uses the stable-baselines3 1.x `BaseAlgorithm` API (`policy_base`, `create_eval_env`, old `_setup_learn`, `start_time` in seconds) | ported to stable-baselines3 2.x |
+| `ruamel.yaml` 0.18+ removed `dump()`, which the envtest scripts use | small `dump()` helper on the `YAML()` API |
+| torch 2.6+ refuses to load SB3 policy checkpoints (`weights_only=True`) | `weights_only=False` in `run_vision_ppo.py`; only load checkpoints you trust |
 
 ## Troubleshooting
 
@@ -124,7 +175,7 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 - **First `--render` run is slow**: the first launch of the freshly built app can take over a minute (macOS checks the new app, and Unity compiles Metal shaders). If the drone doesn't take off, stop with Ctrl-C and run the demo again.
 - **`Unity Connection time out!` / empty images**: run `pixi run build-renderer` first. If it still fails, check `Player.log` (see above). A missing `static_obstacles.csv` makes the renderer error out, so re-run setup without `SKIP_OBSTACLES`.
 - **Port 11311 already in use**: a previous `roscore` is still running. Stop it with `pkill -f rosmaster`.
-- **Start over**: `rm -rf build devel logs .catkin_tools` and run `pixi run setup` again. Delete `.pixi` too for a completely fresh environment.
+- **Start over**: `rm -rf build build_flightgym devel logs .catkin_tools` and run `pixi run setup` again. Delete `.pixi` too for a completely fresh environment.
 
 ## Caveats
 
@@ -133,6 +184,7 @@ ROS Noetic (EOL May 2025) and Gazebo Classic (EOL January 2025) no longer receiv
 ## Credits
 
 - [agile_flight](https://github.com/uzh-rpg/agile_flight), [flightmare](https://github.com/uzh-rpg/flightmare) and [dodgedrone_simulation](https://github.com/uzh-rpg/dodgedrone_simulation): Robotics and Perception Group, University of Zurich. Upstream code is under its own licenses.
+- [acmpc_public](https://github.com/uzh-rpg/acmpc_public): Robotics and Perception Group, University of Zurich. [mpc.pytorch](https://github.com/locuslab/mpc.pytorch): Brandon Amos et al.
 - [RoboStack](https://robostack.github.io/) for ROS on conda-forge.
 
 The scripts and patches in this repository are MIT licensed (see [LICENSE](LICENSE)).
