@@ -10,9 +10,13 @@ Upstream only supports Ubuntu 20.04 + ROS Noetic. This repo provides:
 
 Upstream sources are fetched from the public `uzh-rpg` repositories at setup time. Nothing from them is vendored here.
 
-![Onboard camera on an M4 Mac: RGB (left) and depth (right) from the Flightmare renderer during the demo flight](docs/img/camera_rgb_depth.png)
+![pixi run demo --render on an Apple M4 Mac: rviz with RGB and depth camera panels, the DodgeDrone pilot GUI, and the Flightmare Unity renderer](docs/img/demo_windows.png)
 
-*Onboard camera during `pixi run demo --render` on an Apple M4: RGB (left) and depth (right) from the natively built Flightmare renderer, flying through the DodgeDrone obstacle field in the Industrial scene.*
+*`pixi run demo --render` on an Apple M4: rviz with the onboard RGB and depth cameras (back), the DodgeDrone pilot GUI (left), and the natively built Flightmare Unity renderer (right). The drone flies through the obstacle field at 1 m/s.*
+
+![Onboard camera: RGB (left) and depth (right)](docs/img/camera_rgb_depth.png)
+
+*Onboard camera frames, 320×240 at 25 Hz: RGB (left) and depth (right).*
 
 ## Requirements
 
