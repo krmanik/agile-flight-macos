@@ -121,6 +121,10 @@ def main():
         args.log_std_init = saved_args["log_std_init"]
         start_it = max(int(os.path.basename(p)[5:10]) for p in glob.glob(os.path.join(run_dir, "Policy", "iter_*.pth")))
     os.environ["ACMPC_T"] = str(args.T)
+    # On a GPU, solve the MPC for the whole PPO batch at once: the solver is
+    # launch-bound, and the default 1024-sample chunks run one after another
+    if args.device != "cpu" and torch.cuda.is_available():
+        os.environ.setdefault("ACMPC_CHUNK", str(args.n_steps * args.num_envs))
     torch.manual_seed(args.seed + start_it)
 
     env = RaceEnv(num_envs=args.num_envs, seed=args.seed + start_it, track=args.track, laps=args.laps)

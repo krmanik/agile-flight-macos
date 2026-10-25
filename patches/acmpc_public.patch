@@ -1,5 +1,5 @@
 diff --git a/training_modules/mlp_mpc_policy.py b/training_modules/mlp_mpc_policy.py
-index 9f1c820..ee6b8ba 100644
+index 9f1c820..3225147 100644
 --- a/training_modules/mlp_mpc_policy.py
 +++ b/training_modules/mlp_mpc_policy.py
 @@ -1,7 +1,7 @@
@@ -20,6 +20,16 @@ index 9f1c820..ee6b8ba 100644
  import torch as th
  from torch import nn
  
+@@ -94,7 +94,8 @@ class CustomNetwork(nn.Module):
+         # Solve optimization in smaller batches
+         n_batch = features.shape[0]
+ 
+-        chunk_length = 1024
++        # Samples per MPC solve (ACMPC_CHUNK): larger is much faster on a GPU
++        chunk_length = int(os.environ.get("ACMPC_CHUNK", "1024"))
+         # n_chunks = n_batch // chunk_length + 1
+ 
+         chunks = th.split(sigmoid_cost_all, chunk_length, dim=0)
 diff --git a/training_modules/mlp_only_policy.py b/training_modules/mlp_only_policy.py
 index 5d2834c..82b870a 100644
 --- a/training_modules/mlp_only_policy.py

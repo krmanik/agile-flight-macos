@@ -21,6 +21,8 @@ if git -C "$ACMPC_PATH" apply --reverse --check "$WS/patches/acmpc_public.patch"
   echo ">>> acmpc_public.patch: already applied"
 else
   echo ">>> Applying acmpc_public.patch"
+  # Drop an older version of the patch first
+  git -C "$ACMPC_PATH" checkout -- training_modules/mlp_mpc_policy.py training_modules/mlp_only_policy.py
   git -C "$ACMPC_PATH" apply "$WS/patches/acmpc_public.patch"
 fi
 
