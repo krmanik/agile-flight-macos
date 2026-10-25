@@ -1,5 +1,5 @@
 diff --git a/mpc/lqr_step.py b/mpc/lqr_step.py
-index cad5d6c..493c762 100644
+index cad5d6c..29f192d 100644
 --- a/mpc/lqr_step.py
 +++ b/mpc/lqr_step.py
 @@ -189,7 +189,7 @@ def LQRStep(n_state,
@@ -11,6 +11,20 @@ index cad5d6c..493c762 100644
  
                  # Currently unimplemented:
                  assert not ((delta_u is not None) and (u_lower is None))
+@@ -278,8 +278,11 @@ def LQRStep(n_state,
+             if no_op_forward:
+                 ctx.save_for_backward(
+                     x_init, C, c, F, f, current_x, current_u)
+-                ctx.current_x, ctx.current_u = current_x, current_u
+-                return current_x, current_u
++                # Return copies: returning the tensors this closure holds makes
++                # them the outputs, and output -> grad_fn -> LQRStepFn ->
++                # closure -> output is a cycle through the autograd graph that
++                # Python's GC cannot collect (every call leaked its batch)
++                return current_x.clone(), current_u.clone()
+ 
+             if delta_space:
+                 # Taylor-expand the objective to do the backward pass in
 diff --git a/mpc/pnqp.py b/mpc/pnqp.py
 index 7e8eba2..76dbd4d 100644
 --- a/mpc/pnqp.py
