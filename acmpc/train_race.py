@@ -54,7 +54,7 @@ def parser():
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="auto")
     p.add_argument("--log_dir", default=os.path.join(HERE, "saved", "race"))
-    p.add_argument("--resume", help="continue a run directory from its latest checkpoint")
+    p.add_argument("--resume", help="continue RUN_DIR from its latest checkpoint, or RUN_DIR:ITER from that one")
     return p
 
 
@@ -102,6 +102,9 @@ class RaceCallback(BaseCallback):
             self.save(self.iteration)
 
     def save(self, it):
+        if not all(torch.isfinite(p).all() for p in self.model.policy.parameters()):
+            print("Policy has NaN/inf parameters, not saving iteration", it)
+            return
         os.makedirs(os.path.join(self.run_dir, "Policy"), exist_ok=True)
         os.makedirs(os.path.join(self.run_dir, "RMS"), exist_ok=True)
         # SB3's policy.save() stores the state dict and the constructor args
@@ -113,13 +116,15 @@ def main():
     args = parser().parse_args()
     start_it = 0
     if args.resume:
-        run_dir = args.resume.rstrip("/")
+        run_dir, _, resume_it = args.resume.partition(":")
+        run_dir = run_dir.rstrip("/")
         with open(os.path.join(run_dir, "config.json")) as f:
             saved_args = json.load(f)
         for k in ("policy", "track", "T", "num_envs", "n_steps", "laps", "seed"):
             setattr(args, k, saved_args[k])
         args.log_std_init = saved_args["log_std_init"]
-        start_it = max(int(os.path.basename(p)[5:10]) for p in glob.glob(os.path.join(run_dir, "Policy", "iter_*.pth")))
+        start_it = int(resume_it) if resume_it else max(
+            int(os.path.basename(p)[5:10]) for p in glob.glob(os.path.join(run_dir, "Policy", "iter_*.pth")))
     os.environ["ACMPC_T"] = str(args.T)
     # On a GPU, solve the MPC for the whole PPO batch at once: the solver is
     # launch-bound, and the default 1024-sample chunks run one after another
