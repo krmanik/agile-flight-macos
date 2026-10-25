@@ -38,17 +38,27 @@ if "com.unity.nuget.newtonsoft-json" not in deps:
     print(">>> Added com.unity.nuget.newtonsoft-json to Packages/manifest.json")
 EOF
 
-# Empty racing arena (renderer/RaceArena.cs) as scene_id 4, after the four
-# upstream ids (0 warehouse, 1 industrial, 2 mountain, 3 wasteland)
+# Racing scenes (renderer/RaceScenes.cs). flightlib accepts scene ids < 5
+# only, so they take the slots of upstream scenes that are not public:
+# 0 warehouse (was Warehouse), 2 garage (was Mountain), and 4 arena (new).
+# 1 is Industrial, 3 Wasteland (not public).
 python - "$PROJECT/Assets/Flightmare/Scripts/sceneSchedule.cs" <<'EOF'
 import sys
 path = sys.argv[1]
 src = open(path, encoding="utf-8-sig").read()
-line = '      scenes_list.Add("Environments/Arena/Arena");\n'
-anchor = "      scenes_list.Add(SCENE_WASTELAND);\n"
-if line not in src:
-    open(path, "w", encoding="utf-8-sig").write(src.replace(anchor, anchor + line))
-    print(">>> Registered the race arena as scene_id 4 in sceneSchedule.cs")
+new = src
+for old in ("Arena/Arena", "RaceWarehouse/RaceWarehouse", "RaceGarage/RaceGarage"):
+    new = new.replace('      scenes_list.Add("Environments/%s");\n' % old, "")
+new = new.replace("      scenes_list.Add(SCENE_WAREHOUSE);\n",
+                  '      scenes_list.Add("Environments/RaceWarehouse/RaceWarehouse");  // macOS: generated\n')
+new = new.replace("      scenes_list.Add(SCENE_MOUNTAIN);\n",
+                  '      scenes_list.Add("Environments/RaceGarage/RaceGarage");  // macOS: generated\n')
+new = new.replace("      scenes_list.Add(SCENE_WASTELAND);\n",
+                  "      scenes_list.Add(SCENE_WASTELAND);\n"
+                  '      scenes_list.Add("Environments/Arena/Arena");  // macOS: generated\n')
+if new != src:
+    open(path, "w", encoding="utf-8-sig").write(new)
+    print(">>> Registered the race scenes in sceneSchedule.cs (0 warehouse, 2 garage, 4 arena)")
 EOF
 
 # The gate prefabs carry a non-kinematic Rigidbody (rpg_gate even with
@@ -60,7 +70,8 @@ for prefab in "$PROJECT/Assets/Resources/gate_default.prefab" \
 done
 
 mkdir -p "$PROJECT/Assets/Editor"
-cp "$WS/renderer/BuildMacOS.cs" "$WS/renderer/RaceArena.cs" "$PROJECT/Assets/Editor/"
+rm -f "$PROJECT/Assets/Editor/RaceArena.cs" "$PROJECT/Assets/Editor/RaceArena.cs.meta"
+cp "$WS/renderer/BuildMacOS.cs" "$WS/renderer/RaceScenes.cs" "$PROJECT/Assets/Editor/"
 
 echo ">>> Building $APP (first run imports all assets and can take a long time)"
 LOG="$WS/logs/unity_build.log"

@@ -71,8 +71,8 @@ Rebuild after code changes with `pixi run build` (or `catkin build` inside `pixi
 | Camera images (RGB / depth), vision-based mode | ✅ after building the Unity renderer (below) |
 | Python RL env `flightgym` (`VisionEnv_v1`), `rpg_baselines` PPO training and evaluation | ✅ (below) |
 | ACMPC training (differentiable MPC actor) and flying the policy in the ROS sim | ✅ (below) |
-| Gate racing (paper task): AC-MPC / AC-MLP training (Colab), evaluation, racing in the ROS sim with gates in rviz and Unity | ✅ (below) |
-| Environments other than Industrial | ❌ not in the public Unity project |
+| Gate racing (paper task): AC-MPC / AC-MLP training (Colab), evaluation, racing in the ROS sim with gates in rviz and Unity (Industrial, warehouse, garage, arena) | ✅ (below) |
+| Environments other than Industrial | ❌ not in the public Unity project; generated warehouse, garage and arena scenes instead (below) |
 | BEM propeller model (`use_bem_propeller_model:=True`) | ❌ no-op upstream: `visionsim_node` always uses `ModelThrustTorqueSimple`, and the public dodgelib has no BEM model |
 | NVIDIA CUDA | ❌ PyTorch runs on CPU / MPS |
 
@@ -183,10 +183,33 @@ It prints success rate, crash rate, gates passed, lap time and speeds, and `--pl
 ```bash
 pixi run race-sim --run acmpc/saved/race/MPC_splits_1                     # rviz: gates + flown path
 pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render            # + Unity, Industrial scene
-pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render --scene arena --trials 5
+pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render --scene warehouse --trials 5
 ```
 
-The script takes off, flies to the track start, races (`acmpc/run_race_ros.py`, 50 Hz CTBR), and prints gates, lap times and speeds per trial. With `--render` the gates appear in Unity (the UZH gate model, `gate_default` prefab). `--scene industrial` (default) moves the track 20 m along x into the open yard of the DodgeDrone corridor; `--scene arena` is an empty checkered ground that `pixi run build-renderer` adds as scene 4. Unity scenery is visual only: the ROS sim has no collisions with it, and the state-based policies never see images.
+The script takes off, flies to the track start, races (`acmpc/run_race_ros.py`, 50 Hz CTBR), and prints gates, lap times and speeds per trial. With `--render` the gates appear in Unity (the UZH gate model, `gate_default` prefab). Unity scenery is visual only: the ROS sim has no collisions with it, and the state-based policies never see images.
+
+Scenes for `--scene`:
+
+| Scene | Unity id | Contents |
+|---|---|---|
+| `industrial` (default) | 1 | upstream Industrial scene; the track is moved 20 m along x into the open yard of the DodgeDrone corridor |
+| `warehouse` | 0 | 56 × 40 × 12 m steel hall: pallet racks, crates, forklifts, loading dock, skylights |
+| `garage` | 2 | 56 × 40 × 7 m concrete parking garage: columns, parked cars, fluorescent lights, ducts |
+| `arena` | 4 | empty 300 m checkered ground |
+
+Upstream's Warehouse, Forest, Mountain, Wasteland and other scenes use commercial assets and only exist as Linux builds, so they can't run on macOS. Instead, [`renderer/RaceScenes.cs`](renderer/RaceScenes.cs) generates the warehouse, garage and arena from Unity primitives and procedural textures (no third-party assets) during `pixi run build-renderer`. The halls are centered on the bundled tracks and keep the track volume clear. flightlib only accepts scene ids below 5, so they take the ids of the non-public upstream Warehouse (0) and Mountain (2) scenes.
+
+![Warehouse scene with the Split-S gates](docs/img/race_warehouse.jpg)
+
+*`--scene warehouse`: onboard camera views of the Split-S track.*
+
+![Garage scene with the Split-S gates](docs/img/race_garage.jpg)
+
+*`--scene garage`.*
+
+![Arena scene with the Split-S gates](docs/img/race_arena.jpg)
+
+*`--scene arena`.*
 
 ## What the setup changes
 
@@ -212,7 +235,7 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 | `ruamel.yaml` 0.18+ removed `dump()`, which the envtest scripts use | small `dump()` helper on the `YAML()` API |
 | torch 2.6+ refuses to load SB3 policy checkpoints (`weights_only=True`) | `weights_only=False` in `run_vision_ppo.py`; only load checkpoints you trust |
 | Unity's obstacle CSV loader skips the first row and copies quaternion and scale without the ROS→Unity conversion; the gate prefabs carry non-kinematic Rigidbodies, so gates fall or get knocked away by the drone model | the race overlay writes a dummy first row and Unity-frame rotation and scale ([`race_track.py`](acmpc/race_track.py)); `build-renderer` makes the gate prefabs kinematic |
-| No obstacle-free Unity scene in the public project | `RaceArena.cs` generates one (scene 4) during `build-renderer` |
+| Only Industrial is public; the other Flightmare scenes are commercial and Linux-only | `RaceScenes.cs` generates a warehouse (id 0), garage (id 2) and arena (id 4) during `build-renderer`; flightlib rejects ids ≥ 5 |
 
 ## Troubleshooting
 

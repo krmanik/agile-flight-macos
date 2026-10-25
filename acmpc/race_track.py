@@ -116,9 +116,10 @@ class Track:
         return passed, hit
 
 
-# Unity scenes the macOS renderer has: Industrial (upstream, the only public
-# environment) and the empty arena added by renderer/RaceArena.cs
-SCENES = {"industrial": 1, "arena": 4}
+# Unity scenes of the macOS renderer (sceneSchedule.cs ids). flightlib only
+# accepts ids < 5, so the generated scenes (renderer/RaceScenes.cs) take the
+# slots of upstream scenes that are not public: 0 Warehouse, 2 Mountain.
+SCENES = {"warehouse": 0, "industrial": 1, "garage": 2, "arena": 4}
 
 
 def write_unity_overlay(track, offset, flightmare_path, out_dir, scene="industrial"):
@@ -135,11 +136,15 @@ def write_unity_overlay(track, offset, flightmare_path, out_dir, scene="industri
     os.makedirs(env_dir, exist_ok=True)
     scene_id = SCENES[scene]
     with open(os.path.join(src, "scene.yaml")) as f:
-        scenes = f.read()
-    if "scene_%d:" % scene_id not in scenes:
-        scenes += '\nscene_%d:\n  name: "%s"\n  render_offset: [0.0, 0.0, 0.0]\n' % (scene_id, scene)
-    with open(os.path.join(dst, "scene.yaml"), "w") as f:
-        f.write(scenes)
+        scenes = yaml.safe_load(f)
+    if scene != "industrial":
+        # The generated scenes are built around the origin
+        scenes["scene_%d" % scene_id] = {"name": scene, "render_offset": [0.0, 0.0, 0.0]}
+    path = os.path.join(dst, "scene.yaml")
+    if os.path.islink(path):
+        os.remove(path)
+    with open(path, "w") as f:
+        yaml.safe_dump(scenes, f, sort_keys=False)
     with open(os.path.join(src, "vision", "config.yaml")) as f:
         cfg = f.read()
     cfg = cfg.replace('level: "medium"', 'level: "race"').replace(

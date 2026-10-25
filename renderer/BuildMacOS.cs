@@ -21,10 +21,9 @@ public static class BuildMacOS
         string[] scenes = enabled.Where(File.Exists).ToArray();
         foreach (string missing in enabled.Except(scenes))
             Console.WriteLine($"[BuildMacOS] Skipping missing scene: {missing}");
-        // Empty racing arena (RaceArena.cs), scene_id 4 in sceneSchedule.cs
-        RaceArena.Ensure();
-        if (!scenes.Contains(RaceArena.ScenePath))
-            scenes = scenes.Append(RaceArena.ScenePath).ToArray();
+        // Racing scenes (RaceScenes.cs): warehouse, garage, arena = scene_id 0, 2, 4
+        RaceScenes.Ensure();
+        scenes = scenes.Concat(RaceScenes.ScenePaths.Except(scenes)).ToArray();
 
         EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Standalone, BuildTarget.StandaloneOSX);
         // Native Apple Silicon player (string API works across 2021.x editor versions)
