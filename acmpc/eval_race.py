@@ -49,6 +49,8 @@ def load_run(spec):
                        map_location="cpu", weights_only=False)
     policy = POLICIES[cfg["policy"]](**saved["data"])
     policy.load_state_dict(saved["state_dict"])
+    # The upstream MPC network always runs on CUDA when there is a GPU
+    policy.to("cuda" if torch.cuda.is_available() else "cpu")
     policy.set_training_mode(False)
     cfg["iteration"] = it
     cfg["name"] = "{0} ({1} it {2})".format(LABELS[cfg["policy"]], os.path.basename(run_dir), it)

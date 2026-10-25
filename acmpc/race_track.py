@@ -39,7 +39,9 @@ def quat_to_rot(q):
 class Track:
     def __init__(self, path, gate_size=GATE_SIZE, gate_frame=GATE_FRAME):
         if not os.path.exists(path):
-            path = os.path.join(TRACK_DIR, path + ".yaml")
+            # A track name, or a path from another machine (a Colab run's config.json)
+            name = os.path.basename(path)
+            path = os.path.join(TRACK_DIR, name if name.endswith(".yaml") else name + ".yaml")
         self.path = path
         self.name = os.path.splitext(os.path.basename(path))[0]
         with open(path) as f:

@@ -58,9 +58,8 @@ def parser():
     return p
 
 
-def linear_schedule(start, end, done_frac=0.0):
-    """start -> end over the whole run; done_frac of it was trained before a resume."""
-    return lambda progress_remaining: end + (start - end) * (1.0 - done_frac) * progress_remaining
+def linear_schedule(start, end):
+    return lambda progress_remaining: end + (start - end) * progress_remaining
 
 
 def next_run_dir(log_dir, prefix):
@@ -144,7 +143,7 @@ def main():
     model = PPO(
         POLICIES[args.policy],
         env,
-        learning_rate=linear_schedule(3e-4, 1e-5, start_it / args.iterations),
+        learning_rate=linear_schedule(3e-4, 1e-5),
         n_steps=args.n_steps,
         batch_size=args.n_steps * args.num_envs,
         n_epochs=10,
@@ -165,10 +164,13 @@ def main():
                            map_location=model.device, weights_only=False)
         model.policy.load_state_dict(saved["state_dict"])
         env.load_rms(os.path.join(run_dir, "RMS", "iter_{0:05d}.npz".format(start_it)))
+        # Continue the step count, so the learning-rate schedule picks up where
+        # it stopped and TensorBoard continues the last tb_<n> curve
+        model.num_timesteps = start_it * args.n_steps * args.num_envs
     callback = RaceCallback(run_dir, args.save_every, start_it)
     try:
         model.learn(total_timesteps=max(args.iterations - start_it, 1) * args.n_steps * args.num_envs,
-                    callback=callback, tb_log_name="tb")
+                    callback=callback, tb_log_name="tb", reset_num_timesteps=not start_it)
     finally:
         callback.save(callback.iteration)
         print("Saved", run_dir, "iteration", callback.iteration)
