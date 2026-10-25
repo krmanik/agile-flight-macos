@@ -7,7 +7,7 @@ Tracks use the format of agile_flight's envsim/parameters/tracks/*.yaml:
     ...
     N: <number of gates>
 The gate is a square in its local x-z plane; the drone flies through it along
-the local y axis (the thin axis of the Flightmare rpg_gate model). The sign of
+the local y axis (the thin axis in the upstream track files). The sign of
 the flight direction comes from the gate order, so a yaw of 90 or -90 degrees
 describes the same gate.
 """
@@ -126,8 +126,8 @@ def write_unity_overlay(track, offset, flightmare_path, out_dir, scene="industri
 
     visionsim_node reads $FLIGHTMARE_PATH/flightpy/configs/vision/config.yaml
     and spawns the static objects of <level>/<env_folder>/static_obstacles.csv
-    in Unity. Pointing FLIGHTMARE_PATH at this overlay shows the gates (the
-    rpg_gate prefab) instead of the DodgeDrone obstacles.
+    in Unity. Pointing FLIGHTMARE_PATH at this overlay shows the gates instead
+    of the DodgeDrone obstacles.
     """
     src = os.path.join(flightmare_path, "flightpy", "configs")
     dst = os.path.join(out_dir, "flightpy", "configs")
@@ -155,9 +155,11 @@ def write_unity_overlay(track, offset, flightmare_path, out_dir, scene="industri
     # already in Unity's frame (flightlib quaternionRos2Unity / scalarRos2Unity).
     # visionsim_node's VisionEnv also reads this file, only for obstacle
     # observations that the race does not use.
+    # gate_default is the UZH gate model (rpg_gate adds a 90 degree yaw). Both
+    # prefabs carry a Rigidbody, which scripts/build_renderer.sh makes kinematic.
     rows = []
     for c, (w, x, y, z), (sx, sy, sz) in zip(track.centers + np.asarray(offset), track.quats, track.scales):
-        rows.append(", ".join(["rpg_gate"] + ["%.6f" % v for v in [*c, w, -x, -z, -y, sx, sz, sy]]))
+        rows.append(", ".join(["gate_default"] + ["%.6f" % v for v in [*c, w, -x, -z, -y, sx, sz, sy]]))
     with open(os.path.join(env_dir, "static_obstacles.csv"), "w") as f:
         f.write("\n".join(rows[:1] + rows) + "\n")
     return out_dir

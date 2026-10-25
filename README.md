@@ -186,7 +186,7 @@ pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render            # + Un
 pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render --scene arena --trials 5
 ```
 
-The script takes off, flies to the track start, races (`acmpc/run_race_ros.py`, 50 Hz CTBR), and prints gates, lap times and speeds per trial. With `--render` the gates appear in Unity as `rpg_gate` objects. `--scene industrial` (default) moves the track 20 m along x into the open yard of the DodgeDrone corridor; `--scene arena` is an empty checkered ground that `pixi run build-renderer` adds as scene 4. Unity scenery is visual only: the ROS sim has no collisions with it, and the state-based policies never see images.
+The script takes off, flies to the track start, races (`acmpc/run_race_ros.py`, 50 Hz CTBR), and prints gates, lap times and speeds per trial. With `--render` the gates appear in Unity (the UZH gate model, `gate_default` prefab). `--scene industrial` (default) moves the track 20 m along x into the open yard of the DodgeDrone corridor; `--scene arena` is an empty checkered ground that `pixi run build-renderer` adds as scene 4. Unity scenery is visual only: the ROS sim has no collisions with it, and the state-based policies never see images.
 
 ## What the setup changes
 
@@ -211,7 +211,7 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 | `rpg_baselines` uses the stable-baselines3 1.x `BaseAlgorithm` API (`policy_base`, `create_eval_env`, old `_setup_learn`, `start_time` in seconds) | ported to stable-baselines3 2.x |
 | `ruamel.yaml` 0.18+ removed `dump()`, which the envtest scripts use | small `dump()` helper on the `YAML()` API |
 | torch 2.6+ refuses to load SB3 policy checkpoints (`weights_only=True`) | `weights_only=False` in `run_vision_ppo.py`; only load checkpoints you trust |
-| Unity's obstacle CSV loader skips the first row and copies quaternion and scale without the ROS→Unity conversion | the race overlay writes a dummy first row and Unity-frame rotation and scale ([`race_track.py`](acmpc/race_track.py)) |
+| Unity's obstacle CSV loader skips the first row and copies quaternion and scale without the ROS→Unity conversion; the gate prefabs carry non-kinematic Rigidbodies, so gates fall or get knocked away by the drone model | the race overlay writes a dummy first row and Unity-frame rotation and scale ([`race_track.py`](acmpc/race_track.py)); `build-renderer` makes the gate prefabs kinematic |
 | No obstacle-free Unity scene in the public project | `RaceArena.cs` generates one (scene 4) during `build-renderer` |
 
 ## Troubleshooting

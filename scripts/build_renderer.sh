@@ -51,6 +51,14 @@ if line not in src:
     print(">>> Registered the race arena as scene_id 4 in sceneSchedule.cs")
 EOF
 
+# The gate prefabs carry a non-kinematic Rigidbody (rpg_gate even with
+# gravity), so gates fall or get knocked away by the drone model and drift.
+# Make them kinematic: gates stay where the track puts them.
+for prefab in "$PROJECT/Assets/Resources/gate_default.prefab" \
+              "$PROJECT/Assets/Flightmare/Templates/RPGGate/rpg_gate.prefab"; do
+  sed -i '' 's/m_IsKinematic: 0/m_IsKinematic: 1/' "$prefab"
+done
+
 mkdir -p "$PROJECT/Assets/Editor"
 cp "$WS/renderer/BuildMacOS.cs" "$WS/renderer/RaceArena.cs" "$PROJECT/Assets/Editor/"
 
