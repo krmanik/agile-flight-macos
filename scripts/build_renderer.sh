@@ -38,8 +38,21 @@ if "com.unity.nuget.newtonsoft-json" not in deps:
     print(">>> Added com.unity.nuget.newtonsoft-json to Packages/manifest.json")
 EOF
 
+# Empty racing arena (renderer/RaceArena.cs) as scene_id 4, after the four
+# upstream ids (0 warehouse, 1 industrial, 2 mountain, 3 wasteland)
+python - "$PROJECT/Assets/Flightmare/Scripts/sceneSchedule.cs" <<'EOF'
+import sys
+path = sys.argv[1]
+src = open(path, encoding="utf-8-sig").read()
+line = '      scenes_list.Add("Environments/Arena/Arena");\n'
+anchor = "      scenes_list.Add(SCENE_WASTELAND);\n"
+if line not in src:
+    open(path, "w", encoding="utf-8-sig").write(src.replace(anchor, anchor + line))
+    print(">>> Registered the race arena as scene_id 4 in sceneSchedule.cs")
+EOF
+
 mkdir -p "$PROJECT/Assets/Editor"
-cp "$WS/renderer/BuildMacOS.cs" "$PROJECT/Assets/Editor/BuildMacOS.cs"
+cp "$WS/renderer/BuildMacOS.cs" "$WS/renderer/RaceArena.cs" "$PROJECT/Assets/Editor/"
 
 echo ">>> Building $APP (first run imports all assets and can take a long time)"
 LOG="$WS/logs/unity_build.log"

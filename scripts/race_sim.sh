@@ -1,0 +1,94 @@
+#!/bin/bash
+# Gate racing in the ROS simulator: simulator + rviz (with the gates) + GUI,
+# take off, then race a policy trained with acmpc/train_race.py.
+# Run inside the workspace env:
+#   pixi run race-sim --run acmpc/saved/race/MPC_splits_1 [--render] [--headless]
+#                     [--scene industrial|arena] [--track splits] [--offset X Y Z]
+#                     [--trials N] [--laps N]
+# --render shows the gates in the Unity renderer (needs pixi run build-renderer).
+# --scene: industrial (default; the track is moved by --offset, default 20 0 0,
+#   into the open yard of DodgeDrone's obstacle corridor) or arena (empty
+#   checkered ground, renderer/RaceArena.cs; default offset 0 0 0).
+# Unity scenery is visual only: the ROS sim has no collisions with it.
+set -e
+
+GUI=True
+RENDER=False
+TRACK=""
+SCENE=industrial
+OFFSET=()
+RACE_ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --headless) GUI=False ;;
+    --render) RENDER=True ;;
+    --track) TRACK="$2"; RACE_ARGS+=("$1" "$2"); shift ;;
+    --scene) SCENE="$2"; shift ;;
+    --offset) OFFSET=("$2" "$3" "$4"); shift 3 ;;
+    *) RACE_ARGS+=("$1") ;;
+  esac
+  shift
+done
+
+if [ ${#OFFSET[@]} -eq 0 ]; then
+  if [ "$SCENE" = arena ]; then OFFSET=(0 0 0); else OFFSET=(20 0 0); fi
+fi
+RACE_ARGS+=(--offset "${OFFSET[@]}")
+
+WS="$PIXI_PROJECT_ROOT"
+source "$WS/devel/setup.bash"
+PILOT=/kingfisher/dodgeros_pilot
+
+if [ -z "$TRACK" ]; then
+  RUN=$(printf '%s\n' "${RACE_ARGS[@]}" | sed -n '/^--run$/{n;p;}')
+  TRACK=$(python -c "import json,sys; print(json.load(open(sys.argv[1].split(':')[0] + '/config.json'))['track_path'])" "$RUN")
+fi
+
+pids=()
+cleanup() {
+  echo "Shutting down..."
+  kill -INT "${pids[@]}" 2>/dev/null || true
+  sleep 3
+  kill "${pids[@]}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+altitude() {
+  timeout 5 rostopic echo -n1 $PILOT/state/pose/position/z 2>/dev/null | head -1
+}
+
+# The sim spawns the static objects of $FLIGHTMARE_PATH's config in Unity:
+# point it at an overlay that contains only the track's gates
+SIM_FLIGHTMARE="$FLIGHTMARE_PATH"
+if [ "$RENDER" = True ]; then
+  SIM_FLIGHTMARE="$WS/build/race_overlay"
+  python "$WS/acmpc/race_track.py" --track "$TRACK" --offset "${OFFSET[@]}" --scene "$SCENE" --out "$SIM_FLIGHTMARE"
+fi
+
+cd "$WS/src/agile_flight/envtest"
+FLIGHTMARE_PATH="$SIM_FLIGHTMARE" roslaunch envsim visionenv_sim.launch render:=$RENDER gui:=$GUI rviz:=False &
+pids+=($!)
+if [ "$GUI" = True ]; then
+  rviz -d "$WS/acmpc/race.rviz" __ns:=kingfisher &
+  pids+=($!)
+fi
+
+echo ">>> Waiting for simulator state"
+until [ -n "$(altitude)" ]; do sleep 1; done
+sleep 3
+
+# The pilot rejects Start until its state estimate is valid, so retry until airborne
+echo ">>> Arm & Start (take off)"
+for attempt in $(seq 1 10); do
+  rostopic pub -1 $PILOT/enable std_msgs/Bool "data: true" >/dev/null
+  rostopic pub -1 $PILOT/start std_msgs/Empty "{}" >/dev/null
+  sleep 6
+  if python -c "import sys; sys.exit(0 if float('$(altitude)' or 0) > 0.5 else 1)"; then
+    break
+  fi
+  echo "    not airborne yet, retrying ($attempt)"
+done
+
+python -u "$WS/acmpc/run_race_ros.py" "${RACE_ARGS[@]}"
+echo ">>> Race over. Ctrl-C to stop the simulator."
+wait

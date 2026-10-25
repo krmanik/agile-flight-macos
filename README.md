@@ -71,6 +71,7 @@ Rebuild after code changes with `pixi run build` (or `catkin build` inside `pixi
 | Camera images (RGB / depth), vision-based mode | ✅ after building the Unity renderer (below) |
 | Python RL env `flightgym` (`VisionEnv_v1`), `rpg_baselines` PPO training and evaluation | ✅ (below) |
 | ACMPC training (differentiable MPC actor) and flying the policy in the ROS sim | ✅ (below) |
+| Gate racing (paper task): AC-MPC / AC-MLP training (Colab), evaluation, racing in the ROS sim with gates in rviz and Unity | ✅ (below) |
 | Environments other than Industrial | ❌ not in the public Unity project |
 | BEM propeller model (`use_bem_propeller_model:=True`) | ❌ no-op upstream: `visionsim_node` always uses `ModelThrustTorqueSimple`, and the public dodgelib has no BEM model |
 | NVIDIA CUDA | ❌ PyTorch runs on CPU / MPS |
@@ -144,6 +145,49 @@ How it fits together:
 - **Speed.** On an M4 (CPU), one MPC solve for 100 environments takes about 8 ms forward and 6 ms backward. mpc.pytorch prints `pnqp warning: Did not converge` because ACMPC runs one LQR iteration per step, as upstream does.
 - `patches/acmpc_public.patch` replaces the `DRONE_PATH` placeholder and imports `gymnasium` instead of `gym`.
 
+## Gate racing: AC-MPC vs AC-MLP (the paper's task)
+
+The ACMPC paper evaluates on **drone racing through gates**: fly a fixed track (Split-S: 7 gates, two of them stacked, so the drone dives through the upper gate, loops, and comes back through the lower one) as fast as possible without crashing. It compares two actors trained with the same PPO setup:
+
+- **AC-MLP**: standard PPO, an MLP outputs the CTBR command directly.
+- **AC-MPC**: an MLP outputs the cost of a differentiable MPC (horizon 5, quadrotor model inside), and the MPC's first command is the action.
+
+The paper's claims: AC-MPC learns from less exploration, reaches the same lap times, and handles out-of-distribution conditions better (wind, mass and body-rate-limit changes, other start positions, a different simulator). Upstream released the networks and the MPC, but not the racing environment. [`acmpc/race_env.py`](acmpc/race_env.py) rebuilds it from the paper (Sec. IV-A):
+
+| | |
+|---|---|
+| Observation | velocity, rotation matrix, relative corners of the next gate, corner offsets to the gate after it (36), plus the raw drone state for the MPC |
+| Action | collective thrust + body rates, limits of ACMPC's MPC model and `kingfisher.yaml` |
+| Reward | progress towards the next gate center − 0.01·‖ω‖; +10 gate passed; +10 race finished; −10 crash (gate frame, ground, leaving the arena) |
+| Tracks | [`acmpc/tracks/`](acmpc/tracks/): `splits` (upstream `envsim/parameters/tracks/SplitS.yaml`), `circle`; any file in that format works |
+| PPO | paper Table II: γ 0.98, λ 0.95, 250 steps × 100 envs, 10 epochs, lr 3e-4 → 1e-5, log-std −1.2 (AC-MPC) / −0.5 (AC-MLP) |
+
+The environment is plain numpy (no flightgym, no ROS), so it trains on Colab. The training simulator adds thrust and body-rate lag to the MPC's model, so the MPC never has the exact dynamics. Gates are 1.5 m square openings with a 0.3 m frame.
+
+**1. Train on Colab.** Open [`acmpc/colab_train_race.ipynb`](acmpc/colab_train_race.ipynb) (in VS Code with the Colab extension: Select Kernel → Colab → GPU), Run All. It trains both policies in parallel, saves to Google Drive when it can, resumes after a disconnect, and packages `race_runs.zip`. Unzip that into `acmpc/saved/race/`. Locally the same is `python acmpc/train_race.py --policy mpc|mlp --track splits [--resume RUN]`; AC-MPC takes ~27 s per iteration on an M4 CPU, so use a GPU.
+
+**2. Compare in the training simulator** (64 starts spread over a 0.5 m cube, as in the paper):
+
+```bash
+pixi run eval-race acmpc/saved/race/MPC_splits_1 acmpc/saved/race/MLP_splits_1 --plot race.png
+pixi run eval-race RUN_MPC RUN_MLP --sweep mass_scale 0.8 1.0 1.2 1.4     # paper Fig. 7
+pixi run eval-race RUN_MPC RUN_MLP --sweep omega_max_scale 1.0 0.8 0.6   # body-rate limit
+pixi run eval-race RUN_MPC RUN_MLP --wind 0 0 -5                         # constant force [N]
+pixi run eval-race RUN_MPC RUN_MLP --track circle                        # unseen track
+```
+
+It prints success rate, crash rate, gates passed, lap time and speeds, and `--plot` draws top and 3D views of all runs with the gates.
+
+**3. Race in the ROS simulator.** dodgeros has a rotor-level model and its own low-level controller, so this is a sim-to-sim transfer test, like the paper's evaluation in a higher-fidelity simulator:
+
+```bash
+pixi run race-sim --run acmpc/saved/race/MPC_splits_1                     # rviz: gates + flown path
+pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render            # + Unity, Industrial scene
+pixi run race-sim --run acmpc/saved/race/MPC_splits_1 --render --scene arena --trials 5
+```
+
+The script takes off, flies to the track start, races (`acmpc/run_race_ros.py`, 50 Hz CTBR), and prints gates, lap times and speeds per trial. With `--render` the gates appear in Unity as `rpg_gate` objects. `--scene industrial` (default) moves the track 20 m along x into the open yard of the DodgeDrone corridor; `--scene arena` is an empty checkered ground that `pixi run build-renderer` adds as scene 4. Unity scenery is visual only: the ROS sim has no collisions with it, and the state-based policies never see images.
+
 ## What the setup changes
 
 All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.toml`](pixi.toml):
@@ -167,6 +211,8 @@ All changes are in [`patches/`](patches/), [`scripts/`](scripts/) and [`pixi.tom
 | `rpg_baselines` uses the stable-baselines3 1.x `BaseAlgorithm` API (`policy_base`, `create_eval_env`, old `_setup_learn`, `start_time` in seconds) | ported to stable-baselines3 2.x |
 | `ruamel.yaml` 0.18+ removed `dump()`, which the envtest scripts use | small `dump()` helper on the `YAML()` API |
 | torch 2.6+ refuses to load SB3 policy checkpoints (`weights_only=True`) | `weights_only=False` in `run_vision_ppo.py`; only load checkpoints you trust |
+| Unity's obstacle CSV loader skips the first row and copies quaternion and scale without the ROS→Unity conversion | the race overlay writes a dummy first row and Unity-frame rotation and scale ([`race_track.py`](acmpc/race_track.py)) |
+| No obstacle-free Unity scene in the public project | `RaceArena.cs` generates one (scene 4) during `build-renderer` |
 
 ## Troubleshooting
 

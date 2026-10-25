@@ -1,0 +1,29 @@
+# Circle track: 6 gates on a 5 m circle at 1.5 m height, flown counter-clockwise.
+# Same format as agile_flight's envsim/parameters/tracks/*.yaml.
+start_pos: [4.33, -2.5, 1.5]
+gates:
+  Gate1:
+    position: [5.000, 0.000, 1.5]
+    rotation: [1.0000000, 0, 0, 0.0000000]
+    scale: [0.604, 0.604, 0.604]
+  Gate2:
+    position: [2.500, 4.330, 1.5]
+    rotation: [0.8660254, 0, 0, 0.5000000]
+    scale: [0.604, 0.604, 0.604]
+  Gate3:
+    position: [-2.500, 4.330, 1.5]
+    rotation: [0.5000000, 0, 0, 0.8660254]
+    scale: [0.604, 0.604, 0.604]
+  Gate4:
+    position: [-5.000, 0.000, 1.5]
+    rotation: [0.0000000, 0, 0, 1.0000000]
+    scale: [0.604, 0.604, 0.604]
+  Gate5:
+    position: [-2.500, -4.330, 1.5]
+    rotation: [-0.5000000, 0, 0, 0.8660254]
+    scale: [0.604, 0.604, 0.604]
+  Gate6:
+    position: [2.500, -4.330, 1.5]
+    rotation: [-0.8660254, 0, 0, 0.5000000]
+    scale: [0.604, 0.604, 0.604]
+  N: 6
