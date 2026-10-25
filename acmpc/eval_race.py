@@ -163,6 +163,8 @@ def main():
     p.add_argument("--laps", type=int)
     p.add_argument("--mass_scale", type=float, default=1.0)
     p.add_argument("--omega_max_scale", type=float, default=1.0)
+    p.add_argument("--dynamics", choices=("dodgeros", "simple"), default="dodgeros",
+                   help="simulator model (race_env.py); dodgeros matches the ROS sim")
     p.add_argument("--drag", type=float, default=0.0)
     p.add_argument("--wind", type=float, nargs=3, default=(0.0, 0.0, 0.0))
     p.add_argument("--sweep", nargs="+", metavar=("PARAM", "VALUES"),
@@ -170,7 +172,7 @@ def main():
     p.add_argument("--plot", help="save trajectory plot (png)")
     args = p.parse_args()
 
-    env_kwargs = dict(mass_scale=args.mass_scale, omega_max_scale=args.omega_max_scale,
+    env_kwargs = dict(dynamics=args.dynamics, mass_scale=args.mass_scale, omega_max_scale=args.omega_max_scale,
                       drag=args.drag, wind=tuple(args.wind))
     if args.track:
         env_kwargs["track"] = args.track

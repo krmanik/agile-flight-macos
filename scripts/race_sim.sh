@@ -66,6 +66,7 @@ if [ "$RENDER" = True ]; then
   python "$WS/acmpc/race_track.py" --track "$TRACK" --offset "${OFFSET[@]}" --scene "$SCENE" --out "$SIM_FLIGHTMARE"
 fi
 
+START_DIR="$PWD"
 cd "$WS/src/agile_flight/envtest"
 FLIGHTMARE_PATH="$SIM_FLIGHTMARE" roslaunch envsim visionenv_sim.launch render:=$RENDER gui:=$GUI rviz:=False &
 pids+=($!)
@@ -90,6 +91,8 @@ for attempt in $(seq 1 10); do
   echo "    not airborne yet, retrying ($attempt)"
 done
 
+# --run and --track paths are relative to where the script was started
+cd "$START_DIR"
 python -u "$WS/acmpc/run_race_ros.py" "${RACE_ARGS[@]}"
 echo ">>> Race over. Ctrl-C to stop the simulator."
 wait

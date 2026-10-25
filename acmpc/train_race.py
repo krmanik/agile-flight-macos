@@ -33,7 +33,7 @@ from stable_baselines3 import PPO  # noqa: E402
 from stable_baselines3.common.callbacks import BaseCallback  # noqa: E402
 
 from acmpc_policy import MlpMpcPolicy, MlpOnlyPolicy  # noqa: E402
-from race_env import RaceEnv  # noqa: E402
+from race_env import DEFAULTS, RaceEnv  # noqa: E402
 
 POLICIES = {"mpc": MlpMpcPolicy, "mlp": MlpOnlyPolicy}
 # Paper Table II: AC-MPC needs less exploration noise than AC-MLP
@@ -122,6 +122,11 @@ def main():
         for k in ("policy", "track", "T", "num_envs", "n_steps", "laps", "seed"):
             setattr(args, k, saved_args[k])
         args.log_std_init = saved_args["log_std_init"]
+        # Runs from before the dodgeros model have no "dynamics" entry
+        dynamics = saved_args["env"].get("dynamics", "simple")
+        if dynamics != DEFAULTS["dynamics"]:
+            sys.exit("{0} was trained with the {1!r} dynamics, race_env.py now simulates {2!r}: "
+                     "start a new run".format(run_dir, dynamics, DEFAULTS["dynamics"]))
         start_it = int(resume_it) if resume_it else max(
             int(os.path.basename(p)[5:10]) for p in glob.glob(os.path.join(run_dir, "Policy", "iter_*.pth")))
     os.environ["ACMPC_T"] = str(args.T)

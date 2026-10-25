@@ -3,10 +3,16 @@
 A vectorized stable-baselines3 VecEnv in plain numpy (no flightgym / ROS), so it
 trains anywhere, e.g. on Colab.
 
-Quadrotor: collective thrust + body rate (CTBR) commands, the parameters of
-ACMPC's MPC model (diff_mpc_drones/drone.py) and the ROS sim's kingfisher.yaml.
-Unlike the MPC model, the simulator adds first-order thrust and body-rate
-responses and integrates at 200 Hz, so the MPC's model is not exact.
+Quadrotor: collective thrust + body rate (CTBR) commands. The default dynamics
+("dodgeros") are a port of the ROS sim the policies are flown in
+(dodgelib's QuadrotorSimulator with LowLevelControllerSimple, kingfisher.yaml):
+a P body-rate controller computes torques, the allocation turns them into
+per-rotor thrusts clamped to [0, thrust_max], and the motors follow with a
+first-order lag. At full collective thrust there is no torque left, so body
+rates respond slowly. Commands reach the drone after a delay (ROS round trip
+plus the sim loop; 20 ms fits a recorded ROS flight), randomized per episode.
+"simple" is the old idealized model: first-order thrust and body-rate
+responses, no delay. Neither matches ACMPC's MPC model (drone.py) exactly.
 
 Observation (paper Sec. IV-A1), 36 values, normalized with running stats:
   v (3), R (9, row-major), corners of the next gate relative to the drone (12),
@@ -36,14 +42,28 @@ OMEGA_MAX = np.array([10.0, 10.0, 4.0])
 GRAVITY = np.array([0.0, 0.0, -9.8066])
 C_HALF = 4 * THRUST_MAX / MASS / 2
 
+# dodgeros sim: envsim/parameters/quads/kingfisher.yaml, dodgelib defaults
+SIM_MASS = 0.750
+INERTIA = np.array([0.0025, 0.0021, 0.0043])
+K_RATE = np.array([20.0, 20.0, 40.0])  # LowLevelControllerSimple P gain (1/s)
+TAU_MOTOR = 0.033
+K_THRUST = 1.562522e-06  # rotor thrust = K_THRUST * omega^2
+_ROTOR_X = np.array([0.0775, -0.0775, -0.0775, 0.0775])  # fr, bl, br, fl
+_ROTOR_Y = np.array([-0.1, 0.1, -0.1, 0.1])
+# [collective thrust, torque x, y, z] = ALLOC @ rotor thrusts
+ALLOC = np.stack([np.ones(4), _ROTOR_Y, -_ROTOR_X, 0.022 * np.array([-1.0, -1.0, 1.0, 1.0])])
+ALLOC_INV = np.linalg.inv(ALLOC)
+
 DEFAULTS = dict(
     track="splits",
     laps=2,
     max_steps=1000,         # 20 s at 50 Hz
     ctrl_dt=0.02,           # = the MPC's dt
-    sim_substeps=4,
-    tau_thrust=0.033,       # motor time constant (s)
-    tau_rate=0.03,          # body-rate tracking time constant (s)
+    sim_substeps=20,        # 1 ms, as dodgeros
+    dynamics="dodgeros",    # or "simple"
+    cmd_delay=(0.01, 0.03), # command delay (s), uniform per episode, at most 2 * ctrl_dt
+    tau_thrust=0.033,       # "simple": thrust time constant (s)
+    tau_rate=0.03,          # "simple": body-rate tracking time constant (s)
     rate_penalty=0.01,
     start_noise=0.25,       # start position: cube of 0.5 m side, as in the paper
     random_start_prob=0.5,  # fraction of episodes that start before a random gate
@@ -117,7 +137,11 @@ class RaceEnv(VecEnv):
         self.q = np.zeros((n, 4))
         self.v = np.zeros((n, 3))
         self.w = np.zeros((n, 3))
-        self.c = np.zeros(n)            # actual mass-normalized collective thrust
+        self.c = np.zeros(n)            # "simple": actual mass-normalized collective thrust
+        self.motors = np.zeros((n, 4))  # "dodgeros": rotor speeds (rad/s)
+        # Last three commands [c, wx, wy, wz] (oldest first) and each env's delay
+        self.cmds = np.zeros((n, 3, 4))
+        self.delay = np.zeros(n)
         self.target = np.zeros(n, dtype=int)
         self.passed = np.zeros(n, dtype=int)
         self.steps = np.zeros(n, dtype=int)
@@ -139,21 +163,37 @@ class RaceEnv(VecEnv):
     def step_wait(self):
         cfg, tr = self.cfg, self.track
         a = self._actions
-        c_cmd = (a[:, 0] + 1.0) * C_HALF
-        w_cmd = np.clip(a[:, 1:] * OMEGA_MAX, -OMEGA_MAX * cfg["omega_max_scale"],
-                        OMEGA_MAX * cfg["omega_max_scale"])
+        w_lim = OMEGA_MAX * cfg["omega_max_scale"]
+        cmd = np.concatenate([(a[:, :1] + 1.0) * C_HALF, np.clip(a[:, 1:] * OMEGA_MAX, -w_lim, w_lim)], 1)
+        self.cmds = np.concatenate([self.cmds[:, 1:], cmd[:, None]], 1)
 
         p_prev = self.p.copy()
+        rows = np.arange(self.num_envs)
         dt = cfg["ctrl_dt"] / cfg["sim_substeps"]
         k_c = 1 - np.exp(-dt / cfg["tau_thrust"])
         k_w = 1 - np.exp(-dt / cfg["tau_rate"])
-        wind = np.asarray(cfg["wind"]) / (MASS * cfg["mass_scale"])
-        for _ in range(cfg["sim_substeps"]):
-            self.c += (c_cmd - self.c) * k_c
-            self.w += (w_cmd - self.w) * k_w
+        k_m = 1 - np.exp(-dt / TAU_MOTOR)
+        mass = SIM_MASS * cfg["mass_scale"]
+        ext = np.asarray(cfg["wind"]) / mass + GRAVITY
+        for k in range(cfg["sim_substeps"]):
+            # Each command takes effect self.delay after it was sent
+            late = np.clip(np.ceil((self.delay - k * dt) / cfg["ctrl_dt"] - 1e-9), 0, 2).astype(int)
+            u = self.cmds[rows, 2 - late]
             z_b = quat_rot(self.q)[:, :, 2]
-            acc = z_b * (self.c / cfg["mass_scale"])[:, None] + GRAVITY - cfg["drag"] * self.v + wind
-            self.v += acc * dt
+            if cfg["dynamics"] == "simple":
+                self.c += (u[:, 0] - self.c) * k_c
+                self.w += (u[:, 1:] - self.w) * k_w
+                acc = z_b * (self.c / cfg["mass_scale"])[:, None]
+            else:
+                # LowLevelControllerSimple: it assumes the nominal mass
+                jw = INERTIA * self.w
+                torque = INERTIA * K_RATE * (u[:, 1:] - self.w) + np.cross(self.w, jw)
+                f_des = np.clip(np.concatenate([SIM_MASS * u[:, :1], torque], 1) @ ALLOC_INV.T, 0.0, THRUST_MAX)
+                self.motors += (np.sqrt(f_des / K_THRUST) - self.motors) * k_m
+                f = (K_THRUST * self.motors ** 2) @ ALLOC.T
+                acc = z_b * (f[:, :1] / mass)
+                self.w += (f[:, 1:] - np.cross(self.w, jw)) / INERTIA * dt
+            self.v += (acc + ext - cfg["drag"] * self.v) * dt
             self.p += self.v * dt
             self.q = quat_mul(self.q, self._exp_map(self.w * dt))
         self.q /= np.linalg.norm(self.q, axis=1, keepdims=True)
@@ -261,7 +301,13 @@ class RaceEnv(VecEnv):
         self.v[idx] = vel
         self.q[idx] = yaw_quat(yaw)
         self.w[idx] = 0.0
-        self.c[idx] = -GRAVITY[2] * cfg["mass_scale"]
+        hover = -GRAVITY[2] * cfg["mass_scale"]
+        self.c[idx] = hover
+        self.motors[idx] = np.sqrt(SIM_MASS * hover / 4 / K_THRUST)
+        self.cmds[idx] = [hover, 0.0, 0.0, 0.0]
+        lo, hi = cfg["cmd_delay"]
+        assert hi <= 2 * cfg["ctrl_dt"], "cmd_delay is limited to two control steps"
+        self.delay[idx] = self.rng.uniform(lo, hi, n)
         self.target[idx] = target
         self.passed[idx] = 0
         self.steps[idx] = 0
