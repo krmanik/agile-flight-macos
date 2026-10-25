@@ -26,4 +26,15 @@ else
   git -C "$ACMPC_PATH" apply "$WS/patches/acmpc_public.patch"
 fi
 
+# mpc.pytorch builds batch x batch diagonal matrices in its line searches
+# (2.3 GB at the 25k-sample batches used on a GPU); scale rows instead
+MPC="$ACMPC_PATH/mpc.pytorch"
+if git -C "$MPC" apply --reverse --check "$WS/patches/mpc_pytorch.patch" 2>/dev/null; then
+  echo ">>> mpc_pytorch.patch: already applied"
+else
+  echo ">>> Applying mpc_pytorch.patch"
+  git -C "$MPC" checkout -- mpc
+  git -C "$MPC" apply "$WS/patches/mpc_pytorch.patch"
+fi
+
 python -c "import mlp_mpc_policy, mpc; print('>>> ACMPC modules OK')"

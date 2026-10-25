@@ -1,0 +1,26 @@
+diff --git a/mpc/lqr_step.py b/mpc/lqr_step.py
+index cad5d6c..493c762 100644
+--- a/mpc/lqr_step.py
++++ b/mpc/lqr_step.py
+@@ -189,7 +189,7 @@ def LQRStep(n_state,
+                 xt = x[t]
+                 ut = u[t]
+                 dxt = dx[t]
+-                new_ut = util.bmv(Kt, dxt) + ut + torch.diag(alphas).mm(kt)
++                new_ut = util.bmv(Kt, dxt) + ut + alphas.unsqueeze(1) * kt
+ 
+                 # Currently unimplemented:
+                 assert not ((delta_u is not None) and (u_lower is None))
+diff --git a/mpc/pnqp.py b/mpc/pnqp.py
+index 7e8eba2..76dbd4d 100644
+--- a/mpc/pnqp.py
++++ b/mpc/pnqp.py
+@@ -67,7 +67,7 @@ def pnqp(H, q, lower, upper, x_init=None, n_iter=20):
+             # doing the line search.
+             # assert count < 10
+ 
+-            maybe_x = util.eclamp(x+torch.diag(alpha).mm(dx), lower, upper)
++            maybe_x = util.eclamp(x+alpha.unsqueeze(1) * dx, lower, upper)
+             armijos = (GAMMA+1e-6)*torch.ones(n_batch).type_as(x)
+             armijos[J] = (obj(x)-obj(maybe_x))[J]/util.bdot(g, x-maybe_x)[J]
+             I = armijos <= GAMMA
