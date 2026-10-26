@@ -41,6 +41,7 @@ class RacePilot:
         self.offset = np.array(args.offset, dtype=np.float64)
         self.laps = args.laps or self.cfg["laps"]
         self.timeout = args.timeout
+        self.deterministic = not args.stochastic
         self.rms = RunningMeanStd(36)
         d = np.load(rms_path)
         self.rms.mean, self.rms.var = d["mean"], d["var"]
@@ -158,7 +159,7 @@ class RacePilot:
         if msg.t - self.t_cmd < 0.02 - 1e-4:
             return
         self.t_cmd = msg.t
-        action, _ = self.policy.predict(self.observation(p, q, v, w), deterministic=True)
+        action, _ = self.policy.predict(self.observation(p, q, v, w), deterministic=self.deterministic)
         a = np.clip(action[0], -1, 1)
         cmd = Command()
         cmd.t = msg.t
@@ -192,6 +193,8 @@ def main():
     p.add_argument("--laps", type=int)
     p.add_argument("--trials", type=int, default=1)
     p.add_argument("--timeout", type=float, default=30.0)
+    p.add_argument("--stochastic", action="store_true",
+                   help="sample actions like PPO training does, instead of the mean action")
     args = p.parse_args(rospy.myargv()[1:])
 
     rospy.init_node("race_pilot")
