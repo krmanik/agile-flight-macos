@@ -3,6 +3,7 @@
 # catkin workspace (sources are fetched by scripts/setup.sh)
 src/agile_flight/
 src/acmpc_public
+src/FlashSAC
 build/
 devel/
 logs/

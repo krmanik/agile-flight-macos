@@ -72,6 +72,7 @@ Rebuild after code changes with `pixi run build` (or `catkin build` inside `pixi
 | Python RL env `flightgym` (`VisionEnv_v1`), `rpg_baselines` PPO training and evaluation | ✅ (below) |
 | ACMPC training (differentiable MPC actor) and flying the policy in the ROS sim | ✅ (below) |
 | Gate racing (paper task): AC-MPC / AC-MLP training (Colab), evaluation, racing in the ROS sim with gates in rviz and Unity (Industrial, warehouse, garage, arena) | ✅ (below) |
+| Gate racing with FlashSAC (off-policy SAC) on the same task: training (Colab), evaluation, racing in the ROS sim | ✅ (below) |
 | Environments other than Industrial | ❌ not in the public Unity project; generated warehouse, garage and arena scenes instead (below) |
 | BEM propeller model (`use_bem_propeller_model:=True`) | ❌ no-op upstream: `visionsim_node` always uses `ModelThrustTorqueSimple`, and the public dodgelib has no BEM model |
 | NVIDIA CUDA | ❌ PyTorch runs on CPU / MPS |
@@ -210,6 +211,28 @@ Upstream's Warehouse, Forest, Mountain, Wasteland and other scenes use commercia
 ![Arena scene with the Split-S gates](docs/img/race_arena.jpg)
 
 *`--scene arena`.*
+
+## Gate racing with FlashSAC
+
+[`flashsac/`](flashsac/) trains [FlashSAC](https://github.com/Holiday-Robot/FlashSAC) (Kim et al., arXiv 2604.04539: off-policy SAC with large batches, few updates and bounded norms) on the same racing MDP as the PPO runs (`acmpc/race_env.py`, dodgeros dynamics, 50M env steps). Differences to the PPO setup, all needed for off-policy learning: a fixed observation normalization (so replay-buffer transitions keep their meaning), an asymmetric critic that also sees the full drone state, rotor speeds, command delay and last commands, and timeouts as truncations. Hyperparameters are FlashSAC's GPU-simulator settings (paper Table 9) with PPO's γ = 0.98.
+
+```bash
+pixi run setup-flashsac     # clones Holiday-Robot/FlashSAC into src/FlashSAC (or: export FLASHSAC_PATH=...)
+pixi run train-flashsac     # logs to acmpc/saved/race/SAC_splits_dodgeros_<n>; use a GPU
+```
+
+**Train on Colab:** [`flashsac/colab_flashsac_race.ipynb`](flashsac/colab_flashsac_race.ipynb) (Run All on a T4, ~45 min per seed) trains several seeds, saves to Google Drive when it can, resumes after a disconnect, and packages `flashsac_runs.zip`. Unzip that into `acmpc/saved/race/`.
+
+FlashSAC runs work wherever PPO runs do, as `RUN_DIR`, `RUN_DIR:ENV_STEPS` or `RUN_DIR:best` (the checkpoint with the best training-time evaluation; the deterministic policy can collapse between checkpoints, so the latest is not always the best):
+
+```bash
+pixi run eval-race acmpc/saved/race/SAC_splits_dodgeros_1:best acmpc/saved/race/MLP_splits_1 --plot race.png
+pixi run race-sim --run acmpc/saved/race/SAC_splits_dodgeros_1:best --render
+pixi run python flashsac/compare.py "FlashSAC=RUN_SAC" "PPO=RUN_MLP"        # learning curves, steps / time to a success rate
+pixi run python flashsac/benchmark.py "FlashSAC=RUN_SAC:best" "AC-MLP=RUN_MLP"  # mass, drag, delay, wind, random starts
+```
+
+First results on Split-S (one seed each, 64 starts): FlashSAC reaches 100% success with a 5.07 s lap (AC-MLP: 100%, 5.08 s). It needs about as many env steps as PPO AC-MLP (50% success at 13.4M vs 10.6M steps) but less wall-clock time (15 vs 19 min to 50%, 20 vs 28 min to 80%; FlashSAC on a Colab T4, PPO on a Kaggle GPU).
 
 ## What the setup changes
 

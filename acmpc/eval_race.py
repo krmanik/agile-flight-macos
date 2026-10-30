@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Evaluate and compare racing policies (AC-MPC vs AC-MLP) from train_race.py.
 
+FlashSAC runs (flashsac/flashsac_race.py) are evaluated the same way.
+
 Like the paper (Fig. 12, Table I, Fig. 7): fly each policy from N start
 positions spread over a 0.5 m cube, report success rate, lap time and speed,
 and optionally sweep a model mismatch the policies never saw in training.
@@ -10,7 +12,8 @@ and optionally sweep a model mismatch the policies never saw in training.
   python acmpc/eval_race.py RUN_A RUN_B --sweep mass_scale 0.8 1.0 1.2 1.4
   python acmpc/eval_race.py RUN_A --wind 0 0 -5                  # constant force (N)
 
-A run is a run directory (latest checkpoint) or RUN_DIR:ITER.
+A run is a run directory (latest checkpoint) or RUN_DIR:ITER (FlashSAC:
+RUN_DIR:ENV_STEPS or RUN_DIR:best).
 """
 import argparse
 import glob
@@ -40,6 +43,10 @@ def load_run(spec):
     run_dir = run_dir.rstrip("/")
     with open(os.path.join(run_dir, "config.json")) as f:
         cfg = json.load(f)
+    if cfg.get("algo") == "flashsac":
+        sys.path.insert(0, os.path.join(HERE, "..", "flashsac"))
+        import flashsac_race
+        return flashsac_race.load_run(spec)
     if it:
         it = int(it)
     else:

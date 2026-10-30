@@ -59,3 +59,6 @@ train-acmpc = "python acmpc/train_acmpc.py"
 train-race = "python acmpc/train_race.py"
 eval-race = "python acmpc/eval_race.py"
 race-sim = "bash scripts/race_sim.sh"
+# FlashSAC (Holiday-Robot/FlashSAC, MIT) at the commit the racing runs used
+setup-flashsac = "test -d $FLASHSAC_PATH/.git || git clone https://github.com/Holiday-Robot/FlashSAC.git $FLASHSAC_PATH; git -C $FLASHSAC_PATH checkout -q 87edc9061150ae9e962dd84e6544e27a1554b3ab"
+train-flashsac = "python flashsac/flashsac_race.py"
